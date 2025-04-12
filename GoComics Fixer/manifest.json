@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "GoComics Comment Fixer",
+  "version": "1.0",
+  "description": "Auto-expand OpenWeb comments on GoComics with UI toggles.",
+  "content_scripts": [
+    {
+      "matches": ["*://*.gocomics.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_end"
+    }
+  ]
+}
