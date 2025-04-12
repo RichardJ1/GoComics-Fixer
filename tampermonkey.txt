@@ -1,0 +1,119 @@
+// ==UserScript==
+// @name         GoComics Comment Fixer (Toggle-Friendly)
+// @namespace    http://tampermonkey.net/
+// @version      1.6
+// @description  Auto-expand OpenWeb comments on GoComics with UI toggles ("See more", replies, more comments, etc.)
+// @author       You
+// @match        *://*.gocomics.com/*
+// @grant        none
+// ==/UserScript==
+
+(function () {
+  'use strict';
+
+  const defaultSettings = {
+    expandSeeMore: true,
+    expandReplies: true,
+    expandMoreReplies: true,
+    expandMoreComments: true
+  };
+
+  let settings = JSON.parse(localStorage.getItem('owAutoExpandSettings') || 'null') || { ...defaultSettings };
+
+  const clickMemory = new WeakMap();
+
+  function getPatterns() {
+    const patterns = [];
+    if (settings.expandSeeMore) patterns.push('see more');
+    if (settings.expandReplies) patterns.push('1 reply', /^\d+ replies$/);
+    if (settings.expandMoreReplies) patterns.push('show 1 more reply', /^show \d+ more replies$/);
+    if (settings.expandMoreComments) patterns.push('show more comments');
+    return patterns;
+  }
+
+  function queryShadowRoots(root = document, selector = '') {
+    const elements = [];
+    function traverse(node) {
+      if (node.shadowRoot) {
+        const shadowMatches = node.shadowRoot.querySelectorAll(selector);
+        if (shadowMatches.length) elements.push(...shadowMatches);
+        node.shadowRoot.childNodes.forEach(traverse);
+      }
+      if (node.children) [...node.children].forEach(traverse);
+    }
+    traverse(root);
+    return elements;
+  }
+
+function autoClickMatchingText(tags) {
+  const patterns = getPatterns();
+  const elements = queryShadowRoots(document, tags);
+
+  for (const el of elements) {
+    const text = el.innerText?.trim().toLowerCase();
+    if (!text) continue;
+
+    const shouldClick = patterns.some(p => typeof p === 'string' ? text === p : p.test(text));
+
+    if (shouldClick) {
+      // Always retry Show More Comments
+      const isShowMoreComments = text === 'show more comments';
+
+      const lastText = clickMemory.get(el);
+      if (isShowMoreComments || lastText !== text) {
+        el.click();
+        clickMemory.set(el, text);
+      }
+    }
+  }
+}
+
+  setInterval(() => autoClickMatchingText('button,span'), 2000);
+  autoClickMatchingText('button,span');
+
+  // UI panel
+  const panel = document.createElement('div');
+  panel.style.position = 'fixed';
+  panel.style.bottom = '1em';
+  panel.style.right = '1em';
+  panel.style.zIndex = '99999';
+  panel.style.background = 'white';
+  panel.style.padding = '10px';
+  panel.style.border = '1px solid #aaa';
+  panel.style.borderRadius = '6px';
+  panel.style.boxShadow = '0 2px 6px rgba(0,0,0,0.2)';
+  panel.style.fontSize = '14px';
+
+  panel.innerHTML = `
+    <strong>GoComics Fixer</strong><br>
+    <label><input type="checkbox" id="seeMore"> See more</label><br>
+    <label><input type="checkbox" id="replies"> Replies</label><br>
+    <label><input type="checkbox" id="moreReplies"> More replies</label><br>
+    <label><input type="checkbox" id="moreComments"> More comments</label><br>
+  `;
+
+  document.body.appendChild(panel);
+
+  function saveSettings() {
+    settings = {
+      expandSeeMore: document.getElementById('seeMore').checked,
+      expandReplies: document.getElementById('replies').checked,
+      expandMoreReplies: document.getElementById('moreReplies').checked,
+      expandMoreComments: document.getElementById('moreComments').checked
+    };
+    localStorage.setItem('owAutoExpandSettings', JSON.stringify(settings));
+  }
+
+  // Init checkboxes
+  document.getElementById('seeMore').checked = settings.expandSeeMore;
+  document.getElementById('replies').checked = settings.expandReplies;
+  document.getElementById('moreReplies').checked = settings.expandMoreReplies;
+  document.getElementById('moreComments').checked = settings.expandMoreComments;
+
+  // Listen for changes
+  ['seeMore', 'replies', 'moreReplies', 'moreComments'].forEach(id => {
+    document.getElementById(id).addEventListener('change', () => {
+      saveSettings();
+    });
+  });
+})();
